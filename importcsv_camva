@@ -1,0 +1,291 @@
+from lxml import etree
+import csv
+import xml.etree.ElementTree as ET
+import os
+import re
+import threading
+import time
+from datetime import datetime
+from itertools import chain
+
+def main():  
+
+    all_xml_files = read_all_xml_files()    #lista dos nomes dos arquivos
+    dados_csv = []
+    dados_csv_racao = []
+    dados_csv_ovo = []
+
+    for file_name in all_xml_files:
+        tree = ET.parse(file_name)
+        root = tree.getroot()
+
+        ramo = ovo_ou_racao(root)
+
+        if ramo == 'xml_racao':
+
+            #Pega dado de tipo de racao, qntd de racao, valor un do kg de racao, valor total da racao
+            a, b = get_racao(root)
+            len_racao = a
+            lista_racao = b
+            
+            #Pega dados de NF, cooperado, data, hora, Valor da Nf
+            lista_nf_data = get_nf_data(root, len_racao)
+            
+            #arruma data e hora
+            lista_nf_data = treat_time(lista_nf_data)
+            #print(lista_nf_data)
+
+            #agrupa os dados da lista de dados da nf e dados da racao
+            racao_data = junta_lista(len_racao, lista_nf_data, lista_racao)
+            #print(racao_data)
+
+            #Copia os dados na lista final com o cabecalho
+            dados_csv_racao = write_final_list(dados_csv_racao, racao_data, ramo)
+            #dados_csv_racao = cabecalho(dados_csv_racao, ramo) 
+            
+            #Passa os dados da lista de racao para o formato de csv
+            csv_file_path = 'racao.csv'
+
+            # Write the list data to a CSV file
+            write_csv_file(csv_file_path,dados_csv_racao)
+
+        if ramo == 'xml_ovo': 
+
+            #Pega dado de tipo de ovo, qntd de ovo, valor un, valor total
+            a, b = get_classificacao(root)
+            lista_classificacao = a
+            len_lista = b
+
+            #Pega dados de NF, cooperado, data, hora, Valor da Nf
+            lista_nf_data = get_nf_data(root, len_lista)
+            #print(lista_nf_data)
+
+            #arruma data e hora
+            lista_nf_data = treat_time(lista_nf_data)
+            #print(lista_nf_data)
+
+            
+            #agrupa os dados da lista de dados da nf e dados da classificacao
+            ovo_data = junta_lista(len_lista,lista_nf_data,lista_classificacao)
+
+            #Copia os dados na lista final com o cabecalho
+            dados_csv_ovo = write_final_list(dados_csv_ovo, ovo_data, ramo)
+            #dados_csv_ovo = cabecalho(dados_csv_ovo, ramo)         
+
+            # Specify the file path for the CSV file
+            csv_file_path = 'ovo.csv'
+            
+            # Write the list data to a CSV file
+            write_csv_file(csv_file_path,dados_csv_ovo)
+
+#racao_ovo_data.insert(0,['NF','Cooperado','Data','Hora','Valor da NF','Tipo de Ovo','Qntd de ovo','Valor un','Valor total'])
+#racao_ovo_data.insert(0,['NF','Cooperado','Data','Hora','Valor da NF','Tipo de Racao','Qntd (kg))','Valor un','Valor racao'])
+        
+def write_final_list(dados_csv, racao_ovo_data, ramo):
+    for t in racao_ovo_data:
+        dados_csv.append(t)
+    return dados_csv
+
+def write_csv_file(csv_file_path,dados_csv):
+    with open(csv_file_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerows(dados_csv)
+
+def cabecalho(dados_csv, ramo,):
+    if ramo == 'xml_ovo':
+        dados_csv = dados_csv.insert(0,['NF','Cooperado','Data','Hora','Valor da NF','Tipo de Ovo','Qntd de ovo','Valor un','Valor total'])
+    if ramo == 'xml_racao':
+        dados_csv = dados_csv(0,['NF','Cooperado','Data','Hora','Valor da NF','Tipo de Racao','Qntd (kg))','Valor un','Valor racao'])
+    return dados_csv
+
+def read_all_xml_files():
+    list_files = os.listdir(".")
+    list_files_xml = [x for x in list_files if x.endswith(".xml")]
+    return list_files_xml
+
+def arruma_lista(len_lista,lista_tipo_ovo,lista_qnd_ovo,lista_valor_unt,lista_valor_total):
+    lista = []
+    for i in range(len(lista_tipo_ovo)):
+        aux = []
+        aux.append(lista_tipo_ovo[i])
+        aux.append(lista_qnd_ovo[i])
+        aux.append(lista_valor_unt[i])
+        aux.append(lista_valor_total[i])
+        lista.append(aux)
+    return lista
+
+def junta_lista(len_lista,lista_nf_data,lista_classificacao):
+    lista_nf_data.reverse()
+    for x in range(len_lista):
+        for k in lista_nf_data:
+            lista_classificacao[x].insert(0,k)
+    return lista_classificacao
+
+def get_nf_data(root, len_lista):
+    
+    lista_nf_data = []
+    lista_nf_data.append(int(root[0][0][0][5].text))    #NF
+    lista_nf_data.append(root[0][0][2][1].text)    #Cooperado "MARCOS MASSATO YAMASAKI" <class 'str'>
+    lista_nf_data.append(root[0][0][0][6].text)    #Data (dd/mm/aa) <class 'str'>
+    lista_nf_data.append(root[0][0][0][6].text)    #Hora <class 'str'>
+    #print(root[0][0][14][0][2].tag)
+    lista_nf_data.append(root[0][0][3 + len_lista][0][8].text)    #Valor da Nf <class 'str'>
+
+    if lista_nf_data[1] == 'MARCOS MASSATO YAMASAKI':
+        lista_nf_data[1] = int(107)
+    if lista_nf_data[1] == 'KIKUMI YAMASAKI':
+        lista_nf_data[1] = int(70)
+    else: 'error'
+
+    return lista_nf_data
+
+def treat_time(lista_nf_data):
+
+    dia_mes_ano = lista_nf_data[2]
+    dia_mes_ano = dia_mes_ano[0:19]
+    #print(dia_mes_ano)
+    #print(type(dia_mes_ano))
+    lista_nf_data[2] = datetime.strptime(dia_mes_ano,'%Y-%m-%dT%H:%M:%S')
+    a = lista_nf_data[2]
+    a = a.date()
+    lista_nf_data[2] = a
+
+    hora_min = lista_nf_data[3]
+    hora_min = hora_min[11:19]
+    #print(hora_min)
+    lista_nf_data[3] = hora_min   #guardado como string
+
+    b = lista_nf_data[4]
+    lista_nf_data[4] = float(b)
+    #print(type(lista_nf_data[4]))
+    return lista_nf_data
+ 
+def get_classificacao(root):
+    
+    
+    lista_classificacao = [[]]
+    lista_tipo_ovo = []
+    lista_qnd_ovo = []
+    lista_valor_unt = []
+    lista_valor_total = []
+
+    range_ovo = [7,8,9]
+
+    #Se o primeiro valor da lista eh o S-JUMBO, temos 11 tipos de ovo
+    #Se o primeiro valor da lista eh o JUMBO, temos 10 tipos de ovo
+    if root[0][0][3][0][2].text == 'OVO BRANCO TIPO SUPER JUMBO': 
+        len_lista = 11
+    if root[0][0][3][0][2].text == 'OVO BRANCO TIPO JUMBO':
+        len_lista = 10
+    
+
+    for item in range(3, 3 + len_lista):
+        #Loop para entrar nos tipos de ovos (classificacao) <det nItem="1">
+        #tipo de ovo
+        
+        tipo_ovo = root[0][0][item][0][2].text
+        tipo_ovo = tipo_ovo[16:]
+        if tipo_ovo == 'SUPER JUMBO': 
+            tipo_ovo = 'S-JUMBO'
+        if tipo_ovo == 'SUPER PEQUENO':
+            tipo_ovo = 'INDUSTRIAL'
+        if tipo_ovo == 'TRINCADO - COOPERADO': 
+            tipo_ovo = 'TRINCADO'
+        
+        lista_tipo_ovo.append(tipo_ovo)
+    
+    for x in range_ovo:
+        
+        for item in range(3, 3 + len_lista):
+    
+            numero = root[0][0][item][0][x].text
+            numero = float(numero)
+            if x == 7:
+                lista_qnd_ovo.append(numero)
+            if x == 8:
+                lista_valor_unt.append(numero)
+            if x == 9: 
+                lista_valor_total.append(numero)
+    
+    #print(lista_tipo_ovo)
+    #print(lista_qnd_ovo)
+    #print(lista_valor_unt)
+    #print(lista_valor_total)    
+    len_lista = len(lista_tipo_ovo)
+    #print(lista_tipo_ovo)
+
+    lista_classificacao = arruma_lista(len_lista,lista_tipo_ovo,lista_qnd_ovo,lista_valor_unt,lista_valor_total)
+    #print(lista_classificacao)
+
+    return lista_classificacao, len_lista
+
+def ovo_ou_racao(root):
+
+    x = root[0][0][3][0][2].text    #<xProd>RACAO POSTURA 1 / 009</xProd> ou <xProd>OVO BRANCO TIPO SUPER JUMBO</xProd>
+    x = x[:5]
+    if x == 'RACAO':
+        y = 'xml_racao'
+        pass
+    if x == 'OVO B':
+        y = 'xml_ovo'
+        pass
+    #else: y = 'not_readilble_xml'
+    return y
+
+def get_racao(root):
+    
+    lista_racao = [[]]
+    lista_tipo_racao = []
+    lista_qnd_racao = []
+    lista_valor_unt_racao = []
+    lista_valor_total_racao = []
+
+    range_racao = [7,8,9]
+
+    len_racao = 0
+    
+    for x in range(10):     #range = 10 pq nao se chega nesse numero (poderia ser 100 por causa do break error)
+        try:
+            racao = root[0][0][3 + x][0][2].text
+            racao = racao[:16]
+            if racao[:5] == 'RACAO':
+                len_racao += 1
+            else: break
+            racao = racao[6:15]
+            if racao == 'PRE-POSTU':
+                racao = 'PRE-POSTURA'
+            if racao == 'CRIA / ':  #nao tinha xml com exemplo de como esta escrito a cria
+                racao = 'CRIA'
+                
+            lista_tipo_racao.append(racao)
+            #print(racao)
+               
+        except IndexError:
+            #print('fim')
+            break
+    
+    range_racao = [7, 8, 9]
+    for x in range_racao:
+        
+        for item in range(3, 3 + len_racao):
+    
+            numero = root[0][0][item][0][x].text
+            numero = float(numero)
+            if x == 7:
+                lista_qnd_racao.append(numero)
+            if x == 8:
+                lista_valor_unt_racao.append(numero)
+            if x == 9: 
+                lista_valor_total_racao.append(numero)
+
+    #print(lista_qnd_racao)
+    #print(lista_valor_unt_racao)
+    #print(lista_valor_total_racao)
+
+    lista_racao = arruma_lista(len_racao,lista_tipo_racao,lista_qnd_racao,lista_valor_unt_racao,lista_valor_total_racao)
+    #print(lista_racao)
+
+    return len_racao, lista_racao
+
+if __name__ == "__main__":
+    main()
