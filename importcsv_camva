@@ -2,9 +2,6 @@ from lxml import etree
 import csv
 import xml.etree.ElementTree as ET
 import os
-import re
-import threading
-import time
 from datetime import datetime
 from itertools import chain
 
@@ -18,7 +15,6 @@ def main():
     for file_name in all_xml_files:
         tree = ET.parse(file_name)
         root = tree.getroot()
-
         ramo = ovo_ou_racao(root)
 
         if ramo == 'xml_racao':
@@ -128,7 +124,9 @@ def get_nf_data(root, len_lista):
     lista_nf_data.append(root[0][0][2][1].text)    #Cooperado "MARCOS MASSATO YAMASAKI" <class 'str'>
     lista_nf_data.append(root[0][0][0][6].text)    #Data (dd/mm/aa) <class 'str'>
     lista_nf_data.append(root[0][0][0][6].text)    #Hora <class 'str'>
-    #print(root[0][0][14][0][2].tag)
+    #print(root[0][0][13][0][8].tag)
+    #print(root[0][0][13][0][8].text)
+    #print(len_lista)
     lista_nf_data.append(root[0][0][3 + len_lista][0][8].text)    #Valor da Nf <class 'str'>
 
     if lista_nf_data[1] == 'MARCOS MASSATO YAMASAKI':
@@ -162,7 +160,6 @@ def treat_time(lista_nf_data):
  
 def get_classificacao(root):
     
-    
     lista_classificacao = [[]]
     lista_tipo_ovo = []
     lista_qnd_ovo = []
@@ -171,28 +168,27 @@ def get_classificacao(root):
 
     range_ovo = [7,8,9]
 
-    #Se o primeiro valor da lista eh o S-JUMBO, temos 11 tipos de ovo
-    #Se o primeiro valor da lista eh o JUMBO, temos 10 tipos de ovo
-    if root[0][0][3][0][2].text == 'OVO BRANCO TIPO SUPER JUMBO': 
-        len_lista = 11
-    if root[0][0][3][0][2].text == 'OVO BRANCO TIPO JUMBO':
-        len_lista = 10
-    
+    len_lista = 0
 
-    for item in range(3, 3 + len_lista):
-        #Loop para entrar nos tipos de ovos (classificacao) <det nItem="1">
-        #tipo de ovo
-        
-        tipo_ovo = root[0][0][item][0][2].text
-        tipo_ovo = tipo_ovo[16:]
-        if tipo_ovo == 'SUPER JUMBO': 
-            tipo_ovo = 'S-JUMBO'
-        if tipo_ovo == 'SUPER PEQUENO':
-            tipo_ovo = 'INDUSTRIAL'
-        if tipo_ovo == 'TRINCADO - COOPERADO': 
-            tipo_ovo = 'TRINCADO'
-        
-        lista_tipo_ovo.append(tipo_ovo)
+    for x in range(13):
+        try:
+            classif_ovo = root[0][0][3 + x][0][2].text
+            if classif_ovo[:10] == 'OVO BRANCO':
+                len_lista += 1
+                
+            else: break
+            classif_ovo = classif_ovo[16:]
+            if classif_ovo == 'SUPER JUMBO':
+                classif_ovo = 'S-JUMBO'
+            if classif_ovo == 'SUPER PEQUENO':
+                classif_ovo = 'INDUSTRIAL'
+            if classif_ovo == 'TRINCADO - COOPERADO': 
+                classif_ovo = 'TRINCADO'
+            lista_tipo_ovo.append(classif_ovo)
+        except IndexError:
+            #print('fim')
+            break
+
     
     for x in range_ovo:
         
@@ -254,7 +250,7 @@ def get_racao(root):
             racao = racao[6:15]
             if racao == 'PRE-POSTU':
                 racao = 'PRE-POSTURA'
-            if racao == 'CRIA / ':  #nao tinha xml com exemplo de como esta escrito a cria
+            if racao == 'CRIA / 01':  #nao tinha xml com exemplo de como esta escrito a cria
                 racao = 'CRIA'
                 
             lista_tipo_racao.append(racao)
